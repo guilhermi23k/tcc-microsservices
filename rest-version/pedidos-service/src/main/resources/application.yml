@@ -1,0 +1,49 @@
+server:
+  port: 8081
+  tomcat:
+    threads:
+      max: 200
+    accept-count: 100
+
+spring:
+  application:
+    name: pedidos-rest
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/pedidos}
+    username: ${SPRING_DATASOURCE_USERNAME:tcc}
+    password: ${SPRING_DATASOURCE_PASSWORD:tcc}
+    hikari:
+      maximum-pool-size: 20
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: 30
+    open-in-view: false
+
+estoque:
+  service:
+    url: ${ESTOQUE_SERVICE_URL:http://localhost:8082}
+
+notificacoes:
+  service:
+    url: ${NOTIFICACOES_SERVICE_URL:http://localhost:8083}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    tags:
+      application: pedidos-rest
+
+logging:
+  level:
+    root: INFO
+    br.uva.tcc: INFO

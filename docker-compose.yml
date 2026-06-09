@@ -1,0 +1,186 @@
+# Docker Compose para o ambiente experimental do TCC.
+#   docker compose --profile rest up -d        # versão síncrona
+#   docker compose --profile messaging up -d   # versão assíncrona
+
+services:
+
+  # ============== INFRAESTRUTURA COMUM ==============
+
+  postgres-pedidos:
+    image: postgres:16-alpine
+    container_name: postgres-pedidos
+    profiles: ["rest", "messaging"]
+    environment:
+      POSTGRES_DB: pedidos
+      POSTGRES_USER: tcc
+      POSTGRES_PASSWORD: tcc
+    ports: ["5433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tcc -d pedidos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [tcc-net]
+
+  postgres-estoque:
+    image: postgres:16-alpine
+    container_name: postgres-estoque
+    profiles: ["rest", "messaging"]
+    environment:
+      POSTGRES_DB: estoque
+      POSTGRES_USER: tcc
+      POSTGRES_PASSWORD: tcc
+    ports: ["5434:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tcc -d estoque"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [tcc-net]
+
+  postgres-notificacoes:
+    image: postgres:16-alpine
+    container_name: postgres-notificacoes
+    profiles: ["rest", "messaging"]
+    environment:
+      POSTGRES_DB: notificacoes
+      POSTGRES_USER: tcc
+      POSTGRES_PASSWORD: tcc
+    ports: ["5435:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tcc -d notificacoes"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [tcc-net]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rabbitmq
+    profiles: ["messaging"]
+    environment:
+      RABBITMQ_DEFAULT_USER: tcc
+      RABBITMQ_DEFAULT_PASS: tcc
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [tcc-net]
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: cadvisor
+    profiles: ["rest", "messaging"]
+    ports: ["8080:8080"]
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    networks: [tcc-net]
+
+  # ============== VERSÃO REST ==============
+
+  pedidos-rest:
+    build: ./rest-version/pedidos-service
+    container_name: pedidos-rest
+    profiles: ["rest"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-pedidos:5432/pedidos
+      SPRING_DATASOURCE_USERNAME: tcc
+      SPRING_DATASOURCE_PASSWORD: tcc
+      ESTOQUE_SERVICE_URL: http://estoque-rest:8082
+      NOTIFICACOES_SERVICE_URL: http://notificacoes-rest:8083
+    ports: ["8081:8081"]
+    depends_on:
+      postgres-pedidos: { condition: service_healthy }
+    networks: [tcc-net]
+
+  estoque-rest:
+    build: ./rest-version/estoque-service
+    container_name: estoque-rest
+    profiles: ["rest"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-estoque:5432/estoque
+      SPRING_DATASOURCE_USERNAME: tcc
+      SPRING_DATASOURCE_PASSWORD: tcc
+    ports: ["8082:8082"]
+    depends_on:
+      postgres-estoque: { condition: service_healthy }
+    networks: [tcc-net]
+
+  notificacoes-rest:
+    build: ./rest-version/notificacoes-service
+    container_name: notificacoes-rest
+    profiles: ["rest"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-notificacoes:5432/notificacoes
+      SPRING_DATASOURCE_USERNAME: tcc
+      SPRING_DATASOURCE_PASSWORD: tcc
+    ports: ["8083:8083"]
+    depends_on:
+      postgres-notificacoes: { condition: service_healthy }
+    networks: [tcc-net]
+
+  # ============== VERSÃO MESSAGING (a implementar) ==============
+
+  pedidos-msg:
+    build: ./messaging-version/pedidos-service
+    container_name: pedidos-msg
+    profiles: ["messaging"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-pedidos:5432/pedidos
+      SPRING_DATASOURCE_USERNAME: tcc
+      SPRING_DATASOURCE_PASSWORD: tcc
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: tcc
+      SPRING_RABBITMQ_PASSWORD: tcc
+    ports: ["8081:8081"]
+    depends_on:
+      postgres-pedidos: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [tcc-net]
+
+  estoque-msg:
+    build: ./messaging-version/estoque-service
+    container_name: estoque-msg
+    profiles: ["messaging"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-estoque:5432/estoque
+      SPRING_DATASOURCE_USERNAME: tcc
+      SPRING_DATASOURCE_PASSWORD: tcc
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: tcc
+      SPRING_RABBITMQ_PASSWORD: tcc
+    ports: ["8082:8082"]
+    depends_on:
+      postgres-estoque: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [tcc-net]
+
+  notificacoes-msg:
+    build: ./messaging-version/notificacoes-service
+    container_name: notificacoes-msg
+    profiles: ["messaging"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-notificacoes:5432/notificacoes
+      SPRING_DATASOURCE_USERNAME: tcc
+      SPRING_DATASOURCE_PASSWORD: tcc
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: tcc
+      SPRING_RABBITMQ_PASSWORD: tcc
+    ports: ["8083:8083"]
+    depends_on:
+      postgres-notificacoes: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [tcc-net]
+
+networks:
+  tcc-net:
+    driver: bridge
