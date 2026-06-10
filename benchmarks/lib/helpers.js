@@ -68,7 +68,6 @@ export function consultarPedido(id) {
 }
 
 // k6 não tem sleep em ms nativo no import padrão; emulamos com busy-wait curto
-// via http nenhum. Usamos o sleep do k6 em segundos fracionados.
 import { sleep } from 'k6';
 function sleepMs(ms) {
   sleep(ms / 1000);

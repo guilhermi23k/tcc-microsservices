@@ -1,0 +1,10 @@
+TESTES DE HIPÓTESE — REST vs MSG (latência média por repetição)
+
+Nível de significância: alpha = 0,05
+
+============================================================
+
+
+Cenário 1:
+  Dados insuficientes (REST=10, MSG=0 reps).
+  Necessário >= 3 repetições de cada versão.

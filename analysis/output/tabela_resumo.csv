@@ -1,0 +1,2 @@
+cenario,versao,lat_media_mean,lat_media_std,lat_p50_mean,lat_p50_std,lat_p95_mean,lat_p95_std,lat_p99_mean,lat_p99_std,throughput_mean,throughput_std,sucesso_pct_mean,sucesso_pct_std
+1,rest,10.94,0.22,10.86,0.20,12.52,0.45,14.34,0.96,50.08,0.06,100.00,0.00
