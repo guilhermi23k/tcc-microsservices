@@ -1,16 +1,19 @@
 # TCC — Análise Comparativa: REST vs Mensageria em Microsserviços
 
-Artefatos de software do TCC que compara empiricamente comunicação síncrona (REST) e assíncrona (RabbitMQ) em arquiteturas de microsserviços.
+Compara empiricamente comunicação síncrona (REST) e assíncrona (RabbitMQ) em microsserviços.
 
 ## Estrutura
 
 ```
-├── docker-compose.yml          # orquestração (perfis: rest, messaging)
+├── docker-compose.yml          # perfis: rest, messaging
 ├── rest-version/               # versão síncrona (COMPLETA)
-│   ├── pedidos-service/        # porta 8081 - orquestrador
-│   ├── estoque-service/        # porta 8082 - reserva de itens
-│   └── notificacoes-service/   # porta 8083 - notificações
-├── messaging-version/          # versão assíncrona (A IMPLEMENTAR)
+│   ├── pedidos-service/        # 8081 - orquestrador (saga orquestrada)
+│   ├── estoque-service/        # 8082 - reserva (lock pessimista)
+│   └── notificacoes-service/   # 8083 - notificações
+├── messaging-version/          # versão assíncrona (COMPLETA)
+│   ├── pedidos-service/        # 8081 - publica evento, consome resultado
+│   ├── estoque-service/        # 8082 - consome pedido, publica resultado
+│   └── notificacoes-service/   # 8083 - consome resultado (pub/sub)
 ├── benchmarks/                 # scripts k6 (A IMPLEMENTAR)
 └── analysis/                   # análise Python (A IMPLEMENTAR)
 ```
@@ -21,25 +24,36 @@ Artefatos de software do TCC que compara empiricamente comunicação síncrona (
 docker compose --profile rest up -d --build
 ```
 
-Aguarde ~1 min. Validação:
+Criação retorna o pedido já CONFIRMADO (síncrono).
+
+## Executar versão Messaging
 
 ```bash
-# Health checks
-curl http://localhost:8081/actuator/health
-curl http://localhost:8082/actuator/health
-curl http://localhost:8083/actuator/health
+docker compose --profile messaging up -d --build
+```
 
-# Criar pedido
-curl -X POST http://localhost:8081/pedidos \
+Criação retorna 202 ACCEPTED com status CRIADO; o processamento ocorre
+de forma assíncrona. Consulte GET /pedidos/{id} para ver o status final.
+
+Console RabbitMQ: http://localhost:15672 (tcc/tcc)
+
+### Validar messaging
+
+```bash
+# Cria pedido (retorna 202, status CRIADO)
+curl -i -X POST http://localhost:8081/pedidos \
   -H "Content-Type: application/json" \
   -d '{"clienteId": 1, "itens": [{"produtoId": 1, "quantidade": 2}]}'
 
-# Consultar pedido
+# Aguarde ~1s e consulte: status deve estar CONFIRMADO
 curl http://localhost:8081/pedidos/1
 ```
 
-Parar: `docker compose --profile rest down` (com `-v` para zerar os bancos).
+## Arquitetura
+
+- **REST**: saga orquestrada. Pedidos chama Estoque e Notificações via HTTP, bloqueante.
+- **Messaging**: saga coreografada. Eventos via RabbitMQ (topic exchanges), com Dead Letter Queues. Pedidos publica `pedido.criado`; Estoque consome, processa e publica `estoque.processado`; Pedidos e Notificações consomem o resultado (publish-subscribe).
 
 ## Stack
 
-Java 17 · Spring Boot 3.2 · PostgreSQL 16 · RabbitMQ 3.13 · Docker Compose · k6 · cAdvisor
+Java 17 · Spring Boot 3.2 · Spring AMQP · PostgreSQL 16 · RabbitMQ 3.13 · Docker Compose · k6 · cAdvisor

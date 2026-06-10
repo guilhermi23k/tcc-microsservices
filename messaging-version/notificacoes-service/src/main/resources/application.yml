@@ -1,0 +1,45 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: notificacoes-msg
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5435/notificacoes}
+    username: ${SPRING_DATASOURCE_USERNAME:tcc}
+    password: ${SPRING_DATASOURCE_PASSWORD:tcc}
+    hikari:
+      maximum-pool-size: 20
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:tcc}
+    password: ${SPRING_RABBITMQ_PASSWORD:tcc}
+    listener:
+      simple:
+        default-requeue-rejected: false
+        acknowledge-mode: auto
+        prefetch: 20
+        concurrency: 5
+        max-concurrency: 20
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    tags:
+      application: notificacoes-msg
+
+logging:
+  level:
+    root: INFO
+    br.uva.tcc: INFO

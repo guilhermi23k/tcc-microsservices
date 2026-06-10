@@ -1,0 +1,52 @@
+server:
+  port: 8081
+  tomcat:
+    threads:
+      max: 200
+    accept-count: 100
+
+spring:
+  application:
+    name: pedidos-msg
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/pedidos}
+    username: ${SPRING_DATASOURCE_USERNAME:tcc}
+    password: ${SPRING_DATASOURCE_PASSWORD:tcc}
+    hikari:
+      maximum-pool-size: 20
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 30
+    open-in-view: false
+
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:tcc}
+    password: ${SPRING_RABBITMQ_PASSWORD:tcc}
+    listener:
+      simple:
+        # Sem retry infinito: na falha, rejeita e manda pra DLQ
+        default-requeue-rejected: false
+        acknowledge-mode: auto
+        prefetch: 20
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    tags:
+      application: pedidos-msg
+
+logging:
+  level:
+    root: INFO
+    br.uva.tcc: INFO

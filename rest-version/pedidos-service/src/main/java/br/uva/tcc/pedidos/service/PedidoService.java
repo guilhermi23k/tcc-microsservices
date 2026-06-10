@@ -46,9 +46,9 @@ public class PedidoService {
     public Pedido criar(CriarPedidoRequest request) {
         Pedido pedido = Pedido.builder()
                 .clienteId(request.getClienteId())
-                .itens(new ArrayList<>(request.getItens().stream()
+                .itens(request.getItens().stream()
                         .map(i -> new ItemPedido(i.getProdutoId(), i.getQuantidade(), null))
-                        .toList()))
+                        .toList())
                 .total(BigDecimal.ZERO)
                 .status(PedidoStatus.CRIADO)
                 .criadoEm(LocalDateTime.now())
