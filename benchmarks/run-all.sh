@@ -6,21 +6,17 @@
 #
 #   versao:     rest | msg
 #   cenario:    1 | 2 | 3 | 4 | all
-#   repeticoes: número de repetições (padrão 10)
+#   repeticoes: número de repetições (padrão 5)
 #
 # Exemplos:
-#   ./run-all.sh rest 1 10      # cenário 1, REST, 10 repetições
-#   ./run-all.sh msg all 30     # todos os cenários, MSG, 30 repetições
-#
-# Pré-requisito: a versão correspondente deve estar no ar
-#   docker compose --profile rest up -d      (para versao=rest)
-#   docker compose --profile messaging up -d (para versao=msg)
+#   ./run-all.sh rest 1 5       # cenário 1, REST, 5 repetições
+#   ./run-all.sh msg all 5      # todos os cenários, MSG, 5 repetições
 
 set -euo pipefail
 
 VERSAO="${1:-rest}"
 CENARIO="${2:-all}"
-REPS="${3:-10}"
+REPS="${3:-5}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="$SCRIPT_DIR/results"
@@ -33,6 +29,33 @@ else
   ESTOQUE_CONTAINER="estoque-msg"
 fi
 
+# Limpa estado entre repetições na versão messaging
+# (purga filas do RabbitMQ e trunca tabelas dos bancos)
+limpar_estado_msg() {
+  echo "    >> Limpando estado (filas + bancos) entre repetições..."
+  # Purga todas as filas do RabbitMQ
+  docker exec rabbitmq rabbitmqctl purge_queue estoque.pedido-criado 2>/dev/null || true
+  docker exec rabbitmq rabbitmqctl purge_queue pedidos.estoque-processado 2>/dev/null || true
+  docker exec rabbitmq rabbitmqctl purge_queue notificacoes.estoque-processado 2>/dev/null || true
+  docker exec rabbitmq rabbitmqctl purge_queue estoque.pedido-criado.dlq 2>/dev/null || true
+  docker exec rabbitmq rabbitmqctl purge_queue pedidos.estoque-processado.dlq 2>/dev/null || true
+  docker exec rabbitmq rabbitmqctl purge_queue notificacoes.estoque-processado.dlq 2>/dev/null || true
+  # Trunca tabelas dos bancos
+  docker exec postgres-pedidos psql -U tcc -d pedidos -c "TRUNCATE TABLE pedidos CASCADE;" 2>/dev/null || true
+  docker exec postgres-estoque psql -U tcc -d estoque -c "UPDATE produtos SET quantidade_estoque = 1000000, versao = 0;" 2>/dev/null || true
+  docker exec postgres-notificacoes psql -U tcc -d notificacoes -c "TRUNCATE TABLE notificacoes CASCADE;" 2>/dev/null || true
+  echo "    >> Estado limpo."
+}
+
+# Limpa estado entre repetições na versão REST
+limpar_estado_rest() {
+  echo "    >> Limpando estado (bancos) entre repetições..."
+  docker exec postgres-pedidos psql -U tcc -d pedidos -c "TRUNCATE TABLE pedidos CASCADE;" 2>/dev/null || true
+  docker exec postgres-estoque psql -U tcc -d estoque -c "UPDATE produtos SET quantidade_estoque = 1000000, versao = 0;" 2>/dev/null || true
+  docker exec postgres-notificacoes psql -U tcc -d notificacoes -c "TRUNCATE TABLE notificacoes CASCADE;" 2>/dev/null || true
+  echo "    >> Estado limpo."
+}
+
 run_cenario() {
   local n="$1"
   local script="$2"
@@ -41,6 +64,14 @@ run_cenario() {
   for rep in $(seq 1 "$REPS"); do
     local out="$RESULTS_DIR/cenario${n}_${VERSAO}_rep${rep}.csv"
     echo ">>> Cenário $n | versão $VERSAO | repetição $rep/$REPS"
+
+    # Limpa estado ANTES de cada repetição
+    if [ "$VERSAO" = "msg" ]; then
+      limpar_estado_msg
+    else
+      limpar_estado_rest
+    fi
+    sleep 5  # pausa curta pra estabilizar após limpeza
 
     if [ "$n" = "3" ]; then
       # Cenário de falha: dispara o k6 em background e injeta a falha.
@@ -60,7 +91,7 @@ run_cenario() {
 
     echo "    CSV salvo em $out"
     # Intervalo entre repetições (estabilização)
-    sleep 30
+    sleep 10
   done
 }
 

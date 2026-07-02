@@ -18,13 +18,13 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Lógica de pedidos na versão assíncrona.
  *
  * criar(): persiste o pedido como CRIADO e PUBLICA um evento.
  *          Retorna imediatamente - NÃO espera o estoque.
- *          A latência percebida pelo cliente é mínima.
  *
  * aplicarResultadoEstoque(): chamado de forma assíncrona quando
  *          o evento de resultado chega do Estoque. Atualiza o
@@ -51,7 +51,6 @@ public class PedidoService {
                 .build();
         pedido = repository.save(pedido);
 
-        // Publica o evento e retorna - processamento ocorre depois.
         List<PedidoCriadoEvento.ItemEvento> itensEvento = pedido.getItens().stream()
                 .map(i -> new PedidoCriadoEvento.ItemEvento(i.getProdutoId(), i.getQuantidade()))
                 .toList();
@@ -63,9 +62,16 @@ public class PedidoService {
 
     @Transactional
     public void aplicarResultadoEstoque(EstoqueProcessadoEvento evento) {
-        Pedido pedido = repository.findById(evento.getPedidoId())
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "Pedido não encontrado: " + evento.getPedidoId()));
+        // Trata graciosamente mensagens órfãs: se o pedido não existe mais
+        // (ex.: banco recriado entre execuções), apenas registra e ignora,
+        // em vez de lançar exceção e enviar a mensagem para a DLQ.
+        Optional<Pedido> optPedido = repository.findById(evento.getPedidoId());
+        if (optPedido.isEmpty()) {
+            log.warn("Resultado recebido para pedido inexistente ({}), ignorando. "
+                    + "Provavelmente mensagem órfã de execução anterior.", evento.getPedidoId());
+            return;
+        }
+        Pedido pedido = optPedido.get();
 
         // Idempotência: se já foi processado, ignora (evita reprocessamento
         // de mensagem duplicada, comum em sistemas de mensageria).
